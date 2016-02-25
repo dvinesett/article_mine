@@ -9,3 +9,8 @@ Requires argument pointing to file. Contents of the file should be urls separate
 ```bash
  $ cnn_parser.py ~/urls.txt 
 ```
+
+If you want to save the output of the program to a file, this will work in most unix shells:
+```bash
+ $ cnn_parser.py ~/urls.txt > ~/output.csv
+```

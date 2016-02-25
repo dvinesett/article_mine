@@ -6,7 +6,7 @@ import unittest
 sys.path.insert(0, '../')
 import cnn_scrape as scrape
 
-# this doesn't work yet
+# doesn't work lol
 
 
 class TestUrlMethods(unittest.TestCase):
@@ -22,7 +22,7 @@ class TestUrlMethods(unittest.TestCase):
             self.body = f.read().replace("\n", " ")
 
     def test_scrape(self):
-        cnn_parser = scrape.CNNScraper()
+        cnn_parser = scrape.CNNRegularScraper()
         article = cnn_parser.scrape_article(self.raw_html)
         self.assertEqual(article, (self.title, self.body))
 

@@ -5,8 +5,9 @@ import functools
 from html.parser import HTMLParser
 import re
 import sys
-import urllib.request
 import urllib.error
+from urllib.parse import urlparse
+import urllib.request
 
 
 def main(argv=None):
@@ -17,7 +18,7 @@ def main(argv=None):
         for line in f.readlines():
             line = line.rstrip("\n")
             if line != '':
-                urls.append(line)
+                urls.append(urlparse(line))
     articles = []
     for url in urls:
         articles.append(get_article(url))
@@ -28,33 +29,11 @@ def main(argv=None):
 
 class CNNScraper(HTMLParser):
     def __init__(self):
-        self._get_data = False
-        self._get_title = False
+        self.get_data = False
+        self.get_title = False
         self.title = 'NoTitleError'
         self.body = ''
         super().__init__()
-
-    def handle_starttag(self, tag, attributes):
-        if tag == 'p':
-            for attr in attributes:
-                if attr[0] == 'class' and 'zn-body__paragraph' in attr[1]:
-                    self._get_data = True
-        if tag == 'h1':
-            for attr in attributes:
-                if attr[0] == 'class' and 'pg-headline' in attr[1]:
-                    self._get_title = True
-
-    def handle_endtag(self, tag):
-        if tag == 'p':
-            self._get_data = False
-        if tag == 'h1':
-            self._get_title = False
-
-    def handle_data(self, data):
-        if self._get_data is True:
-            self.body += ' ' + data
-        if self._get_title is True:
-            self.title = data
 
     def scrape_article(self, url):
         self.feed(url)
@@ -62,8 +41,73 @@ class CNNScraper(HTMLParser):
         return [self.title, self.body]
 
 
-def get_article(url: str):
-    req = urllib.request.Request(url)
+class CNNRegularScraper(CNNScraper, HTMLParser):
+    def __init__(self):
+        super().__init__()
+
+    def handle_starttag(self, tag, attributes):
+        if tag == 'p':
+            for name, value in attributes:
+                if name == 'class' and 'zn-body__paragraph' in value:
+                    self.get_data = True
+        if tag == 'h1':
+            for name, value in attributes:
+                if name == 'class' and 'pg-headline' in value:
+                    self.get_title = True
+
+    def handle_endtag(self, tag):
+        if tag == 'p':
+            self.get_data = False
+        if tag == 'h1':
+            self.get_title = False
+
+    def handle_data(self, data):
+        if self.get_data:
+            self.body += ' ' + data
+        if self.get_title:
+            self.title = data
+
+
+class CNNMoneyScraper(CNNScraper, HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.recording = 0
+        self.tag_stack = []
+
+    def handle_starttag(self, tag, attributes):
+        self.tag_stack.append((tag, attributes))
+        if tag == 'h1':
+            for name, value in attributes:
+                if name == 'class' and 'article-title' in value:
+                    self.get_title = True
+        if tag != 'div':
+            return
+        if self.recording:
+            self.recording += 1
+            return
+        for name, value in attributes:
+            if name == 'id' and value == 'storytext':
+                break
+        else:
+            return
+        self.recording = 1
+
+    def handle_endtag(self, tag):
+        self.tag_stack.pop()
+        if tag == 'div' and self.recording:
+            self.recording -= 1
+        elif tag == 'h1':
+            self.get_title = False
+
+    def handle_data(self, data):
+        if self.recording and 'p' in self.tag_stack:
+            self.body += ' ' + data
+        if self.get_title:
+            self.title = data
+
+
+def get_article(url_parsed):
+    req = urllib.request.Request(url_parsed.geturl())
     try:
         html_gunk = urllib.request.urlopen(req).read().decode('utf-8')
     except urllib.error.HTTPError as e:
@@ -71,7 +115,13 @@ def get_article(url: str):
     except urllib.error.URLError as e:
         print("error invalid url: {1}".format(e.reason))
     else:
-        cnn_parser = CNNScraper()
+        # if you add a new subdomain, likely should add it before 'cnn.com' so it gets chosen first
+        if 'money.cnn.com' in url_parsed.netloc:
+            cnn_parser = CNNMoneyScraper()
+        elif 'cnn.com' in url_parsed.netloc:
+            cnn_parser = CNNRegularScraper()
+        else:
+            raise NotImplementedError('url "{0}" not supported'.format())
         return cnn_parser.scrape_article(html_gunk)
 
 
@@ -79,7 +129,7 @@ def get_data_matrix(articles):
     article_counters = {}
     for article in articles:
         # remove commas from titles. they will mess up csv file
-        article[0] = article[0].replace(',', '')
+        article[0] = article[0].replace(',', '').strip(' ')
         # replace hyphens with spaces and make all characters lowercase
         article[1] = article[1].replace('-', ' ').lower()
         # remove any character that is not a word, space, or '
@@ -100,7 +150,7 @@ def get_data_matrix(articles):
 
     # all_words is a tuple of each unique word
     all_words = tuple(functools.reduce(set.union, map(set, article_counters.values())))
-    data_matrix = [('words', all_words)]
+    data_matrix = [('WORDS:', all_words)]
     for article in articles:
         # row looks like (article_name, (count, count, count, ... ))
         row = (article[0], tuple(article_counters[article[0]][word] for word in all_words))
@@ -111,7 +161,7 @@ def get_data_matrix(articles):
 def write_data_matrix(data_matrix):
     for row in data_matrix:
         counts = ','.join((str(count) for count in row[1]))
-        print(row[0], ',', counts)
+        print(row[0] + ',' + counts)
 
 if __name__ == "__main__":
     main(sys.argv)
