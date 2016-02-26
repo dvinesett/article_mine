@@ -2,13 +2,10 @@
 
 import collections
 import functools
-from html.parser import HTMLParser
 import newspaper
 import re
 import sys
-import urllib.error
 from urllib.parse import urlparse
-import urllib.request
 
 
 def main(argv=None):
