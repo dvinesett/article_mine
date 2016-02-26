@@ -53,7 +53,7 @@ def get_data_matrix(articles):
 
     # all_words is a tuple of each unique word
     all_words = tuple(functools.reduce(set.union, map(set, article_counters.values())))
-    data_matrix = [('WORDS:', all_words)]
+    data_matrix = [('ARTICLES', all_words)]
     for article in articles:
         # row looks like (article_name, (count, count, count, ... ))
         row = (article[0], tuple(article_counters[article[0]][word] for word in all_words))
