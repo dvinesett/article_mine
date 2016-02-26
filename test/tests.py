@@ -4,7 +4,6 @@ import sys
 import urllib.request
 import unittest
 sys.path.insert(0, '../')
-import cnn_scrape as scrape
 
 # doesn't work lol
 
