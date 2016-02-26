@@ -3,6 +3,7 @@
 import collections
 import functools
 from html.parser import HTMLParser
+import newspaper
 import re
 import sys
 import urllib.error
@@ -21,108 +22,13 @@ def main(argv=None):
                 urls.append(urlparse(line))
     articles = []
     for url in urls:
-        articles.append(get_article(url))
+        article = newspaper.Article(url.geturl(), language='en')
+        article.download()
+        article.parse()
+        articles.append([article.title, article.text])
 
     data_matrix = get_data_matrix(articles)
     write_data_matrix(data_matrix)
-
-
-class CNNScraper(HTMLParser):
-    def __init__(self):
-        self.get_data = False
-        self.get_title = False
-        self.title = 'NoTitleError'
-        self.body = ''
-        super().__init__()
-
-    def scrape_article(self, url):
-        self.feed(url)
-        self.body.replace("\n", " ")
-        return [self.title, self.body]
-
-
-class CNNRegularScraper(CNNScraper, HTMLParser):
-    def __init__(self):
-        super().__init__()
-
-    def handle_starttag(self, tag, attributes):
-        if tag == 'p':
-            for name, value in attributes:
-                if name == 'class' and 'zn-body__paragraph' in value:
-                    self.get_data = True
-        if tag == 'h1':
-            for name, value in attributes:
-                if name == 'class' and 'pg-headline' in value:
-                    self.get_title = True
-
-    def handle_endtag(self, tag):
-        if tag == 'p':
-            self.get_data = False
-        if tag == 'h1':
-            self.get_title = False
-
-    def handle_data(self, data):
-        if self.get_data:
-            self.body += ' ' + data
-        if self.get_title:
-            self.title = data
-
-
-class CNNMoneyScraper(CNNScraper, HTMLParser):
-    def __init__(self):
-        super().__init__()
-        self.recording = 0
-        self.tag_stack = []
-
-    def handle_starttag(self, tag, attributes):
-        self.tag_stack.append((tag, attributes))
-        if tag == 'h1':
-            for name, value in attributes:
-                if name == 'class' and 'article-title' in value:
-                    self.get_title = True
-        if tag != 'div':
-            return
-        if self.recording:
-            self.recording += 1
-            return
-        for name, value in attributes:
-            if name == 'id' and value == 'storytext':
-                break
-        else:
-            return
-        self.recording = 1
-
-    def handle_endtag(self, tag):
-        self.tag_stack.pop()
-        if tag == 'div' and self.recording:
-            self.recording -= 1
-        elif tag == 'h1':
-            self.get_title = False
-
-    def handle_data(self, data):
-        if self.recording and 'p' in self.tag_stack:
-            self.body += ' ' + data
-        if self.get_title:
-            self.title = data
-
-
-def get_article(url_parsed):
-    req = urllib.request.Request(url_parsed.geturl())
-    try:
-        html_gunk = urllib.request.urlopen(req).read().decode('utf-8')
-    except urllib.error.HTTPError as e:
-        print("{0} error: {2}".format(e.code, e.reason))
-    except urllib.error.URLError as e:
-        print("error invalid url: {1}".format(e.reason))
-    else:
-        # if you add a new subdomain, likely should add it before 'cnn.com' so it gets chosen first
-        if 'money.cnn.com' in url_parsed.netloc:
-            cnn_parser = CNNMoneyScraper()
-        elif 'cnn.com' in url_parsed.netloc:
-            cnn_parser = CNNRegularScraper()
-        else:
-            raise NotImplementedError('url "{0}" not supported'.format())
-        return cnn_parser.scrape_article(html_gunk)
 
 
 def get_data_matrix(articles):
