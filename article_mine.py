@@ -2,10 +2,11 @@
 
 import collections
 import functools
+import itertools
 import newspaper
+import scipy.spatial.distance
 import re
 import sys
-from urllib.parse import urlparse
 
 
 def main(argv=None):
@@ -16,16 +17,25 @@ def main(argv=None):
         for line in f.readlines():
             line = line.rstrip("\n")
             if line != '':
-                urls.append(urlparse(line))
+                urls.append(line)
     articles = []
     for url in urls:
-        article = newspaper.Article(url.geturl(), language='en')
+        article = newspaper.Article(url, language='en')
         article.download()
         article.parse()
         articles.append([article.title, article.text])
 
     data_matrix = get_data_matrix(articles)
-    write_data_matrix(data_matrix)
+    # write_matrix(data_matrix)
+    title_combinations = article_combinations(articles)
+    euclidean_distances = get_similarity(title_combinations, data_matrix, scipy.spatial.distance.euclidean)
+    cosine_distances = get_similarity(title_combinations, data_matrix, scipy.spatial.distance.cosine)
+    jaccard_distances = get_similarity(title_combinations, data_matrix, scipy.spatial.distance.jaccard)
+    similarity_matrix = get_similarity_matrix(title_combinations,
+                                              euclidean_distances,
+                                              cosine_distances,
+                                              jaccard_distances)
+    write_matrix(similarity_matrix)
 
 
 def get_data_matrix(articles):
@@ -61,10 +71,42 @@ def get_data_matrix(articles):
     return data_matrix
 
 
-def write_data_matrix(data_matrix):
-    for row in data_matrix:
+def write_matrix(matrix):
+
+    for row in matrix:
         counts = ','.join((str(count) for count in row[1]))
         print(row[0] + ',' + counts)
+
+
+def article_combinations(articles):
+    article_titles = [article[0] for article in articles]
+    return tuple(i for i in itertools.combinations(article_titles, 2))
+
+
+def get_similarity(title_combinations, data_matrix, distance_function):
+    # I have to unpack the data matrix and repack it into a dictionary. this could be way more efficient
+    data_matrix_dict = {}
+    # skip header row
+    for row_num in range(1, len(data_matrix)):
+        title = data_matrix[row_num][0]
+        article_body = data_matrix[row_num][1]
+        data_matrix_dict[title] = article_body
+
+    distances = [distance_function.__name__]
+    for title_pair in title_combinations:
+        distances.append(distance_function(data_matrix_dict[title_pair[0]],
+                                           data_matrix_dict[title_pair[1]]))
+    return distances
+
+
+def get_similarity_matrix(title_combinations, *distances):
+    distance_names = tuple(distance[0] for distance in distances)
+    matrix = [('PAIRS', distance_names)]
+    for i in range(len(title_combinations)):
+        pair_text = '|'.join(title_combinations[i])
+        row = pair_text, tuple(distance[i + 1] for distance in distances)
+        matrix.append(row)
+    return matrix
 
 if __name__ == "__main__":
     main(sys.argv)
