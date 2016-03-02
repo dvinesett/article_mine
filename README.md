@@ -1,7 +1,6 @@
 # Web Article Mining
 This program takes a set of urls from most news sites and returns a data matrix for the total count of words in all articles. 
-Supported news sites 
-The format of the data matrix is a comma-separated value (csv) file. 
+Supported news sites are included in [this list](https://github.com/codelucas/newspaper/blob/master/newspaper/resources/misc/popular_sources.txt). The format of the data matrix is a comma-separated value (csv) file. 
 
 ## Requirements
  * Python 3+ should be good enough. Written in Python 3.5. Python 2.7 not supported. Download here: https://www.python.org/downloads/
